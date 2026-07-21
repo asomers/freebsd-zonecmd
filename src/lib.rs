@@ -1,18 +1,16 @@
 #![warn(missing_docs)]
 //! Rust bindings to FreeBSD's `DIOCZONECMD` ioctl for zoned block devices.
 //!
-//! Zoned devices conform to the SCSI Zoned Block Commands (ZBC) and ATA Zoned ATA
+//! Zoned devices conform to the SCSI Zoned Block Commands (ZBC) or ATA Zoned ATA
 //! Command Set (ZAC) specifications. This crate provides bindings equivalent to
 //! what the [zonectl(8)](https://man.freebsd.org/cgi/man.cgi?query=zonectl) utility
 //! provides, but in idiomatic Rust.
 //!
-//! The main entry point is [`Device`], which wraps an open block device and exposes
+//! The main entry point is [`Device`], which borrows an open file descriptor and exposes
 //! methods for querying zone parameters, reporting zones, and managing zone state.
 use std::{
-    fs::{self, File},
     io,
-    os::fd::AsRawFd,
-    path::Path,
+    os::fd::{AsFd, AsRawFd, BorrowedFd},
 };
 
 use nix::ioctl_readwrite;
@@ -27,7 +25,8 @@ cfg_if::cfg_if! {
     }
 }
 
-// Nix's ioctl macros create `pub` functions. Put them into a module to hide them.
+// Nix's ioctl macros create `pub` functions. Put them into a module to hide them from public
+// consumers.
 mod ioctl {
     use super::*;
 
@@ -42,65 +41,47 @@ pub const WRITE_POINTER_NA: u64 = u64::MAX;
 /// The kernel may return fewer entries than requested, based on `maxphys`.
 pub const DEFAULT_REPORT_CHUNK: u32 = 4096;
 
-/// A zoned block device opened for `DIOCZONECMD` operations.
+/// A zoned block device borrowed for `DIOCZONECMD` operations.
 #[derive(Debug)]
-pub struct Device {
-    file: File,
+pub struct Device<'fd> {
+    fd: BorrowedFd<'fd>,
 }
 
-impl Device {
-    /// Open a device read-only.
-    ///
-    /// Sufficient for [`Device::get_params`] and [`Device::report_zones`].
-    pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
-        Ok(Self {
-            file: fs::File::open(path)?,
-        })
+impl<'fd> Device<'fd> {
+    /// Borrow a device file descriptor from any [`AsFd`] type.
+    pub fn new<F: AsFd>(fd: &'fd F) -> Self {
+        Self { fd: fd.as_fd() }
     }
 
-    /// Open a device read-write.
-    ///
-    /// Required for zone management commands such as [`Device::open_zone`].
-    pub fn open_rw(path: impl AsRef<Path>) -> io::Result<Self> {
-        Ok(Self {
-            file: fs::OpenOptions::new().read(true).write(true).open(path)?,
-        })
-    }
-
-    /// Wrap an already-open device file.
-    pub fn from_file(file: File) -> Self {
-        Self { file }
-    }
-
-    /// Borrow the underlying open file.
-    pub fn as_file(&self) -> &File {
-        &self.file
+    /// Return the borrowed file descriptor.
+    pub fn as_fd(&self) -> BorrowedFd<'fd> {
+        self.fd
     }
 
     /// Return zone device parameters.
-    pub fn get_params(&mut self) -> io::Result<DiskParams> {
+    pub fn get_params(&self) -> io::Result<DiskParams> {
         let mut args = Self::new_args(ffi::DISK_ZONE_GET_PARAMS as u8);
         self.zonecmd(&mut args)?;
         Ok(DiskParams::from(unsafe { args.zone_params.disk_params }))
     }
 
     /// Open the zone at `id`, or all zones if `all` is true.
-    pub fn open_zone(&mut self, id: u64, all: bool) -> io::Result<()> {
+    pub fn open_zone(&self, id: u64, all: bool) -> io::Result<()> {
         self.rwp_cmd(ffi::DISK_ZONE_OPEN as u8, id, all)
     }
 
     /// Close the zone at `id`, or all zones if `all` is true.
-    pub fn close_zone(&mut self, id: u64, all: bool) -> io::Result<()> {
+    pub fn close_zone(&self, id: u64, all: bool) -> io::Result<()> {
         self.rwp_cmd(ffi::DISK_ZONE_CLOSE as u8, id, all)
     }
 
     /// Finish the zone at `id`, or all zones if `all` is true.
-    pub fn finish_zone(&mut self, id: u64, all: bool) -> io::Result<()> {
+    pub fn finish_zone(&self, id: u64, all: bool) -> io::Result<()> {
         self.rwp_cmd(ffi::DISK_ZONE_FINISH as u8, id, all)
     }
 
     /// Reset the write pointer for the zone at `id`, or all zones if `all` is true.
-    pub fn reset_write_pointer(&mut self, id: u64, all: bool) -> io::Result<()> {
+    pub fn reset_write_pointer(&self, id: u64, all: bool) -> io::Result<()> {
         self.rwp_cmd(ffi::DISK_ZONE_RWP as u8, id, all)
     }
 
@@ -108,7 +89,7 @@ impl Device {
     ///
     /// This method loops until all matching zones have been collected.
     pub fn report_zones(
-        &mut self,
+        &self,
         options: ReportOptions,
         starting_id: u64,
     ) -> io::Result<ZoneReport> {
@@ -117,7 +98,7 @@ impl Device {
 
     /// Like [`Device::report_zones`], but use `chunk` as the per-ioctl entry buffer size.
     pub fn report_zones_with_chunk(
-        &mut self,
+        &self,
         options: ReportOptions,
         mut starting_id: u64,
         chunk: u32,
@@ -186,7 +167,7 @@ impl Device {
         })
     }
 
-    fn rwp_cmd(&mut self, cmd: u8, id: u64, all: bool) -> io::Result<()> {
+    fn rwp_cmd(&self, cmd: u8, id: u64, all: bool) -> io::Result<()> {
         let mut rwp = ffi::disk_zone_rwp {
             id,
             flags: ffi::DISK_ZONE_RWP_FLAG_NONE as u8,
@@ -208,7 +189,7 @@ impl Device {
     }
 
     fn zonecmd(&self, args: &mut ffi::disk_zone_args) -> io::Result<()> {
-        unsafe { ioctl::dioczonecmd(self.file.as_raw_fd(), args) }?;
+        unsafe { ioctl::dioczonecmd(self.fd.as_raw_fd(), args) }?;
         Ok(())
     }
 }
