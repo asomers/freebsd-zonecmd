@@ -87,12 +87,14 @@ impl<'fd> Device<'fd> {
 
     /// Report zones matching `options`, starting at `starting_id`.
     ///
-    /// This method loops until all matching zones have been collected.
+    /// Yields one [`ZoneEntry`] at a time. Header metadata is available from the
+    /// iterator's [`ReportZones::header`] and [`ReportZones::entries_available`] methods
+    /// immediately after this function returns successfully.
     pub fn report_zones(
         &self,
         options: ReportOptions,
         starting_id: u64,
-    ) -> io::Result<ZoneReport> {
+    ) -> io::Result<ReportZones<'_, 'fd>> {
         self.report_zones_with_chunk(options, starting_id, DEFAULT_REPORT_CHUNK)
     }
 
@@ -100,80 +102,32 @@ impl<'fd> Device<'fd> {
     pub fn report_zones_with_chunk(
         &self,
         options: ReportOptions,
-        mut starting_id: u64,
+        starting_id: u64,
         chunk: u32,
-    ) -> io::Result<ZoneReport> {
-        let mut entries = Vec::new();
-        let mut header = None;
-        let mut entries_available = 0;
-        let mut first_pass = true;
-
-        loop {
-            let mut chunk_entries = vec![ffi::disk_zone_rep_entry {
-                zone_type: 0,
-                zone_condition: 0,
-                zone_flags: 0,
-                zone_length: 0,
-                zone_start_lba: 0,
-                write_pointer_lba: 0,
-                reserved: [0; 32],
-            }; chunk as usize];
-
-            let mut report = ffi::disk_zone_report {
-                starting_id,
-                rep_options: options as u8,
-                header: ffi::disk_zone_rep_header {
-                    same: 0,
-                    maximum_lba: 0,
-                    reserved: [0; 64],
-                },
-                entries_allocated: chunk,
-                entries_filled: 0,
-                entries_available: 0,
-                entries: chunk_entries.as_mut_ptr(),
-            };
-
-            let mut args = Self::new_args(ffi::DISK_ZONE_REPORT_ZONES as u8);
-            args.zone_params.report = report;
-            self.zonecmd(&mut args)?;
-            report = unsafe { args.zone_params.report };
-
-            if first_pass {
-                header = Some(ReportHeader::from(report.header));
-                entries_available = report.entries_available;
-                first_pass = false;
-            }
-
-            for entry in chunk_entries.iter().take(report.entries_filled as usize) {
-                entries.push(ZoneEntry::from(*entry));
-            }
-
-            let more_data = report.entries_available.saturating_sub(report.entries_filled) > 0;
-            if !more_data {
-                break;
-            }
-
-            if let Some(last) = entries.last() {
-                starting_id = last.zone_start_lba + last.zone_length;
-            } else {
-                break;
-            }
-        }
-
-        Ok(ZoneReport {
-            header: header.unwrap_or_default(),
-            entries_available,
-            entries,
-        })
+    ) -> io::Result<ReportZones<'_, 'fd>> {
+        let mut zones = ReportZones {
+            device: self,
+            options,
+            starting_id,
+            chunk,
+            chunk_entries: Vec::new(),
+            chunk_index: 0,
+            header: ReportHeader::default(),
+            entries_available: 0,
+            header_set: false,
+            exhausted: false,
+        };
+        zones.fetch_chunk()?;
+        Ok(zones)
     }
 
     fn rwp_cmd(&self, cmd: u8, id: u64, all: bool) -> io::Result<()> {
         let mut rwp = ffi::disk_zone_rwp {
             id,
-            flags: ffi::DISK_ZONE_RWP_FLAG_NONE as u8,
+            ..Default::default()
         };
         if all {
-            rwp.flags |= ffi::DISK_ZONE_RWP_FLAG_ALL as u8;
+            rwp.flags = ffi::DISK_ZONE_RWP_FLAG_ALL as u8;
         }
 
         let mut args = Self::new_args(cmd);
@@ -184,7 +138,7 @@ impl<'fd> Device<'fd> {
     fn new_args(zone_cmd: u8) -> ffi::disk_zone_args {
         ffi::disk_zone_args {
             zone_cmd,
-            zone_params: unsafe { std::mem::zeroed() },
+            ..Default::default()
         }
     }
 
@@ -370,17 +324,98 @@ impl From<u8> for ZoneSame {
     }
 }
 
-/// Result of [`Device::report_zones`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ZoneReport {
-    /// Report header metadata.
-    pub header: ReportHeader,
-    /// Total number of zones available for the selected filter.
-    pub entries_available: u32,
-    /// Zone entries returned by the kernel.
-    pub entries: Vec<ZoneEntry>,
+/// Iterator over zone entries returned by [`Device::report_zones`].
+#[derive(Debug)]
+pub struct ReportZones<'a, 'fd> {
+    device: &'a Device<'fd>,
+    options: ReportOptions,
+    starting_id: u64,
+    chunk: u32,
+    chunk_entries: Vec<ZoneEntry>,
+    chunk_index: usize,
+    header: ReportHeader,
+    entries_available: u32,
+    header_set: bool,
+    exhausted: bool,
 }
 
+impl<'a, 'fd> ReportZones<'a, 'fd> {
+    /// Report header metadata from the first ioctl.
+    pub fn header(&self) -> &ReportHeader {
+        &self.header
+    }
+
+    /// Total number of zones available for the selected filter.
+    pub fn entries_available(&self) -> u32 {
+        self.entries_available
+    }
+
+    fn fetch_chunk(&mut self) -> io::Result<()> {
+        let mut raw_entries = vec![ffi::disk_zone_rep_entry::default(); self.chunk as usize];
+
+        let mut args = Device::new_args(ffi::DISK_ZONE_REPORT_ZONES as u8);
+        {
+            let report = unsafe { &mut args.zone_params.report };
+            report.starting_id = self.starting_id;
+            report.rep_options = self.options as u8;
+            report.entries_allocated = self.chunk;
+            report.entries = raw_entries.as_mut_ptr();
+        }
+
+        self.device.zonecmd(&mut args)?;
+        let report = { &args.zone_params.report };
+
+        if !self.header_set {
+            self.header = ReportHeader::from(report.header);
+            self.entries_available = report.entries_available;
+            self.header_set = true;
+        }
+
+        self.chunk_entries = raw_entries
+            .iter()
+            .take(report.entries_filled as usize)
+            .map(|entry| ZoneEntry::from(*entry))
+            .collect();
+        self.chunk_index = 0;
+
+        let more_data = report.entries_available.saturating_sub(report.entries_filled) > 0;
+        if !more_data {
+            self.exhausted = true;
+        } else if let Some(last) = self.chunk_entries.last() {
+            self.starting_id = last.zone_start_lba + last.zone_length;
+        } else {
+            self.exhausted = true;
+        }
+
+        Ok(())
+    }
+}
+
+impl<'a, 'fd> Iterator for ReportZones<'a, 'fd> {
+    type Item = io::Result<ZoneEntry>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.chunk_index < self.chunk_entries.len() {
+                let entry = self.chunk_entries[self.chunk_index];
+                self.chunk_index += 1;
+                return Some(Ok(entry));
+            }
+
+            if self.exhausted {
+                return None;
+            }
+
+            return match self.fetch_chunk() {
+                Ok(()) => continue,
+                Err(e) => {
+                    self.exhausted = true;
+                    Some(Err(e))
+                }
+            };
+        }
+    }
+}
 /// A single zone entry from a report-zones operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ZoneEntry {
@@ -519,12 +554,9 @@ mod tests {
     fn zone_entry_write_pointer_na() {
         let entry = ZoneEntry::from(ffi::disk_zone_rep_entry {
             zone_type: ffi::DISK_ZONE_TYPE_CONVENTIONAL as u8,
-            zone_condition: 0,
-            zone_flags: 0,
             zone_length: 1,
-            zone_start_lba: 0,
             write_pointer_lba: WRITE_POINTER_NA,
-            reserved: [0; 32],
+            ..Default::default()
         });
         assert_eq!(entry.write_pointer_lba, None);
     }

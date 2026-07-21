@@ -26,12 +26,14 @@ ffi32.rs)
 esac
 
 if [ -n "${CLANG_ARGS}" ]; then
-	bindgen --allowlist-type 'disk_zone_.*' \
+	bindgen --with-derive-default \
+		--allowlist-type 'disk_zone_.*' \
 		--allowlist-item 'DISK_ZONE_.*' \
 		${CRATEDIR}/bindgen/wrapper.h -- ${CLANG_ARGS} \
 		>> ${CRATEDIR}/src/${FFI_RS}
 else
-	bindgen --allowlist-type 'disk_zone_.*' \
+	bindgen --with-derive-default \
+		--allowlist-type 'disk_zone_.*' \
 		--allowlist-item 'DISK_ZONE_.*' \
 		${CRATEDIR}/bindgen/wrapper.h \
 		>> ${CRATEDIR}/src/${FFI_RS}

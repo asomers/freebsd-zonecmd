@@ -55,7 +55,7 @@ pub const DISK_ZONE_REPORT_ZONES: u32 = 3;
 pub const DISK_ZONE_RWP: u32 = 4;
 pub const DISK_ZONE_GET_PARAMS: u32 = 5;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct disk_zone_disk_params {
     pub zone_mode: u32,
     pub flags: u64,
@@ -80,7 +80,7 @@ const _: () = {
         [::std::mem::offset_of!(disk_zone_disk_params, max_seq_zones) - 32usize];
 };
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct disk_zone_rwp {
     pub id: u64,
     pub flags: u8,
@@ -111,8 +111,17 @@ const _: () = {
     ["Offset of field: disk_zone_rep_header::reserved"]
         [::std::mem::offset_of!(disk_zone_rep_header, reserved) - 16usize];
 };
+impl Default for disk_zone_rep_header {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct disk_zone_rep_entry {
     pub zone_type: u8,
     pub zone_condition: u8,
@@ -171,6 +180,15 @@ const _: () = {
     ["Offset of field: disk_zone_report::entries"]
         [::std::mem::offset_of!(disk_zone_report, entries) - 112usize];
 };
+impl Default for disk_zone_report {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub union disk_zone_params {
@@ -189,6 +207,15 @@ const _: () = {
     ["Offset of field: disk_zone_params::report"]
         [::std::mem::offset_of!(disk_zone_params, report) - 0usize];
 };
+impl Default for disk_zone_params {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct disk_zone_args {
@@ -204,3 +231,12 @@ const _: () = {
     ["Offset of field: disk_zone_args::zone_params"]
         [::std::mem::offset_of!(disk_zone_args, zone_params) - 8usize];
 };
+impl Default for disk_zone_args {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
