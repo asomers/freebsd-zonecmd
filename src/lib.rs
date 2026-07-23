@@ -98,18 +98,17 @@ impl<'fd> Device<'fd> {
         self.report_zones_with_chunk(options, starting_id, DEFAULT_REPORT_CHUNK)
     }
 
-    /// Like [`Device::report_zones`], but use `chunk` as the per-ioctl entry buffer size.
-    pub fn report_zones_with_chunk(
+    fn report_zones_with_chunk(
         &self,
         options: ReportOptions,
         starting_id: u64,
-        chunk: u32,
+        chunksize: u32,
     ) -> io::Result<ReportZones<'_, 'fd>> {
         let mut zones = ReportZones {
             device: self,
             options,
             starting_id,
-            chunk,
+            chunksize,
             chunk_entries: Vec::new(),
             chunk_index: 0,
             header: ReportHeader::default(),
@@ -122,16 +121,14 @@ impl<'fd> Device<'fd> {
     }
 
     fn rwp_cmd(&self, cmd: u8, id: u64, all: bool) -> io::Result<()> {
-        let mut rwp = ffi::disk_zone_rwp {
-            id,
-            ..Default::default()
-        };
-        if all {
-            rwp.flags = ffi::DISK_ZONE_RWP_FLAG_ALL as u8;
-        }
-
         let mut args = Self::new_args(cmd);
-        args.zone_params.rwp = rwp;
+        {
+            let rwp = unsafe { &mut args.zone_params.rwp };
+            rwp.id = id;
+            if all {
+                rwp.flags = ffi::DISK_ZONE_RWP_FLAG_ALL as u8;
+            }
+        }
         self.zonecmd(&mut args)
     }
 
@@ -330,7 +327,7 @@ pub struct ReportZones<'a, 'fd> {
     device: &'a Device<'fd>,
     options: ReportOptions,
     starting_id: u64,
-    chunk: u32,
+    chunksize: u32,
     chunk_entries: Vec<ZoneEntry>,
     chunk_index: usize,
     header: ReportHeader,
@@ -351,19 +348,19 @@ impl<'a, 'fd> ReportZones<'a, 'fd> {
     }
 
     fn fetch_chunk(&mut self) -> io::Result<()> {
-        let mut raw_entries = vec![ffi::disk_zone_rep_entry::default(); self.chunk as usize];
+        let mut raw_entries = vec![ffi::disk_zone_rep_entry::default(); self.chunksize as usize];
 
         let mut args = Device::new_args(ffi::DISK_ZONE_REPORT_ZONES as u8);
         {
             let report = unsafe { &mut args.zone_params.report };
             report.starting_id = self.starting_id;
             report.rep_options = self.options as u8;
-            report.entries_allocated = self.chunk;
+            report.entries_allocated = self.chunksize;
             report.entries = raw_entries.as_mut_ptr();
         }
 
         self.device.zonecmd(&mut args)?;
-        let report = { &args.zone_params.report };
+        let report = unsafe { &args.zone_params.report };
 
         if !self.header_set {
             self.header = ReportHeader::from(report.header);
@@ -423,8 +420,7 @@ pub struct ZoneEntry {
     pub zone_type: ZoneType,
     /// Zone condition.
     pub zone_condition: ZoneCondition,
-    /// Zone flags.
-    pub zone_flags: u8,
+    zone_flags: u8,
     /// Zone length in LBAs.
     pub zone_length: u64,
     /// Starting LBA of the zone.
