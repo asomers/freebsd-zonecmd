@@ -128,11 +128,10 @@ impl<'fd> ZonedDevice<'fd> {
             zone_cmd: cmd,
             zone_params: ffi::disk_zone_params {
                 rwp: ffi::disk_zone_rwp {
-                    id: id,
+                    id,
                     flags: if all { ffi::DISK_ZONE_RWP_FLAG_ALL as u8 } else {0},
                 },
             },
-            ..Default::default()
         };
         self.zonecmd(&mut args)
     }
@@ -359,7 +358,6 @@ impl<'a, 'fd> ReportZones<'a, 'fd> {
                     ..Default::default()
                 },
             },
-            ..Default::default()
         };
 
         self.device.zonecmd(&mut args)?;
