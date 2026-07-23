@@ -60,7 +60,10 @@ impl<'fd> Device<'fd> {
 
     /// Return zone device parameters.
     pub fn get_params(&self) -> io::Result<DiskParams> {
-        let mut args = Self::new_args(ffi::DISK_ZONE_GET_PARAMS as u8);
+        let mut args = ffi::disk_zone_args {
+            zone_cmd: ffi::DISK_ZONE_GET_PARAMS as u8,
+            ..Default::default()
+        };
         self.zonecmd(&mut args)?;
         Ok(DiskParams::from(unsafe { args.zone_params.disk_params }))
     }
@@ -121,22 +124,17 @@ impl<'fd> Device<'fd> {
     }
 
     fn rwp_cmd(&self, cmd: u8, id: u64, all: bool) -> io::Result<()> {
-        let mut args = Self::new_args(cmd);
-        {
-            let rwp = unsafe { &mut args.zone_params.rwp };
-            rwp.id = id;
-            if all {
-                rwp.flags = ffi::DISK_ZONE_RWP_FLAG_ALL as u8;
-            }
-        }
-        self.zonecmd(&mut args)
-    }
-
-    fn new_args(zone_cmd: u8) -> ffi::disk_zone_args {
-        ffi::disk_zone_args {
-            zone_cmd,
+        let mut args = ffi::disk_zone_args {
+            zone_cmd: cmd,
+            zone_params: ffi::disk_zone_params {
+                rwp: ffi::disk_zone_rwp {
+                    id: id,
+                    flags: if all { ffi::DISK_ZONE_RWP_FLAG_ALL as u8 } else {0},
+                },
+            },
             ..Default::default()
-        }
+        };
+        self.zonecmd(&mut args)
     }
 
     fn zonecmd(&self, args: &mut ffi::disk_zone_args) -> io::Result<()> {
@@ -350,14 +348,19 @@ impl<'a, 'fd> ReportZones<'a, 'fd> {
     fn fetch_chunk(&mut self) -> io::Result<()> {
         let mut raw_entries = vec![ffi::disk_zone_rep_entry::default(); self.chunksize as usize];
 
-        let mut args = Device::new_args(ffi::DISK_ZONE_REPORT_ZONES as u8);
-        {
-            let report = unsafe { &mut args.zone_params.report };
-            report.starting_id = self.starting_id;
-            report.rep_options = self.options as u8;
-            report.entries_allocated = self.chunksize;
-            report.entries = raw_entries.as_mut_ptr();
-        }
+        let mut args = ffi::disk_zone_args {
+            zone_cmd: ffi::DISK_ZONE_REPORT_ZONES as u8,
+            zone_params: ffi::disk_zone_params {
+                report: ffi::disk_zone_report {
+                    starting_id: self.starting_id,
+                    rep_options: self.options as u8,
+                    entries_allocated: self.chunksize,
+                    entries: raw_entries.as_mut_ptr(),
+                    ..Default::default()
+                },
+            },
+            ..Default::default()
+        };
 
         self.device.zonecmd(&mut args)?;
         let report = unsafe { &args.zone_params.report };
