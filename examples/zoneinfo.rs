@@ -6,7 +6,7 @@
 use std::{env, fs::File, process};
 
 use freebsd_zonecmd::{
-    Device, DiskParams, ReportOptions, ZoneCondition, ZoneEntry,
+    ZonedDevice, DiskParams, ReportOptions, ZoneCondition, ZoneEntry,
 };
 
 fn main() {
@@ -23,7 +23,7 @@ fn main() {
         process::exit(1);
     });
 
-    let dev = Device::new(&file);
+    let dev = ZonedDevice::new(&file);
 
     let params = dev.get_params().unwrap_or_else(|e| {
         eprintln!("get_params: {e}");

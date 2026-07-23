@@ -13,16 +13,16 @@ equivalent to what the [zonectl(8)] utility provides, but in idiomatic Rust.
 
 # Usage
 
-Open a block device, wrap it in a [`Device`], and call its methods. The device
-file must remain open for as long as the `Device` is used.
+Open a block device, wrap it in a [`ZonedDevice`], and call its methods. The device
+file must remain open for as long as the `ZonedDevice` is used.
 
 ```rust
 use std::fs::File;
 
-use freebsd_zonecmd::{Device, ReportOptions};
+use freebsd_zonecmd::{ZonedDevice, ReportOptions};
 
 let file = File::open("/dev/da0")?;
-let dev = Device::new(&file);
+let dev = ZonedDevice::new(&file);
 
 let params = dev.get_params()?;
 println!("{:?}", params.zone_mode);

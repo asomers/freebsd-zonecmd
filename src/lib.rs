@@ -6,7 +6,7 @@
 //! what the [zonectl(8)](https://man.freebsd.org/cgi/man.cgi?query=zonectl) utility
 //! provides, but in idiomatic Rust.
 //!
-//! The main entry point is [`Device`], which borrows an open file descriptor and exposes
+//! The main entry point is [`ZonedDevice`], which borrows an open file descriptor and exposes
 //! methods for querying zone parameters, reporting zones, and managing zone state.
 use std::{
     io,
@@ -43,11 +43,11 @@ pub const DEFAULT_CHUNKSIZE: u32 = 16384;
 
 /// A zoned block device borrowed for `DIOCZONECMD` operations.
 #[derive(Debug)]
-pub struct Device<'fd> {
+pub struct ZonedDevice<'fd> {
     fd: BorrowedFd<'fd>,
 }
 
-impl<'fd> Device<'fd> {
+impl<'fd> ZonedDevice<'fd> {
     /// Borrow a device file descriptor from any [`AsFd`] type.
     pub fn new<F: AsFd>(fd: &'fd F) -> Self {
         Self { fd: fd.as_fd() }
@@ -143,7 +143,7 @@ impl<'fd> Device<'fd> {
     }
 }
 
-/// Zone device parameters returned by [`Device::get_params`].
+/// Zone device parameters returned by [`ZonedDevice::get_params`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiskParams {
     /// How the drive manages zones.
@@ -245,7 +245,7 @@ impl From<u32> for ZoneMode {
     }
 }
 
-/// Filter for [`Device::report_zones`].
+/// Filter for [`ZonedDevice::report_zones`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ReportOptions {
@@ -319,10 +319,10 @@ impl From<u8> for ZoneSame {
     }
 }
 
-/// Iterator over zone entries returned by [`Device::report_zones`].
+/// Iterator over zone entries returned by [`ZonedDevice::report_zones`].
 #[derive(Debug)]
 pub struct ReportZones<'a, 'fd> {
-    device: &'a Device<'fd>,
+    device: &'a ZonedDevice<'fd>,
     options: ReportOptions,
     starting_id: u64,
     chunksize: u32,
