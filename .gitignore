@@ -1,0 +1,12 @@
+syntax: glob
+Cargo.lock
+*.diff
+*.rej
+*.orig
+*.swn
+*.swo
+*.swp
+.nfs.*
+target
+target_cov
+coverage
