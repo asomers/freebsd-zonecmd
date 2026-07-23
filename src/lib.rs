@@ -39,7 +39,7 @@ pub const WRITE_POINTER_NA: u64 = u64::MAX;
 /// Default number of zone entries to request per `DIOCZONECMD` call.
 ///
 /// The kernel may return fewer entries than requested, based on `maxphys`.
-pub const DEFAULT_REPORT_CHUNK: u32 = 4096;
+pub const DEFAULT_CHUNKSIZE: u32 = 16384;
 
 /// A zoned block device borrowed for `DIOCZONECMD` operations.
 #[derive(Debug)]
@@ -98,7 +98,7 @@ impl<'fd> Device<'fd> {
         options: ReportOptions,
         starting_id: u64,
     ) -> io::Result<ReportZones<'_, 'fd>> {
-        self.report_zones_with_chunk(options, starting_id, DEFAULT_REPORT_CHUNK)
+        self.report_zones_with_chunk(options, starting_id, DEFAULT_CHUNKSIZE)
     }
 
     fn report_zones_with_chunk(

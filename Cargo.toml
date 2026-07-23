@@ -4,11 +4,12 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Alan Somers <asomers@gmail.com>"]
 license = "MIT/Apache-2.0"
+readme = "README.md"
 description = "Rust bindings for FreeBSD's DIOCZONECMD ioctl"
 categories = ["api-bindings", "os::freebsd-apis"]
 keywords = ["FreeBSD", "ZBC", "ZAC", "SMR"]
 rust-version = "1.85"
-include = ["src/**/*", "bindgen/**/*", "LICENSE-*"]
+include = ["src/**/*", "bindgen/**/*", "examples/**/*", "LICENSE-*", "README.md"]
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-freebsd"]
