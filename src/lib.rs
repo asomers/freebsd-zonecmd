@@ -129,7 +129,11 @@ impl<'fd> ZonedDevice<'fd> {
             zone_params: ffi::disk_zone_params {
                 rwp: ffi::disk_zone_rwp {
                     id,
-                    flags: if all { ffi::DISK_ZONE_RWP_FLAG_ALL as u8 } else {0},
+                    flags: if all {
+                        ffi::DISK_ZONE_RWP_FLAG_ALL as u8
+                    } else {
+                        0
+                    },
                 },
             },
         };
@@ -376,7 +380,10 @@ impl<'a, 'fd> ReportZones<'a, 'fd> {
             .collect();
         self.chunk_index = 0;
 
-        let more_data = report.entries_available.saturating_sub(report.entries_filled) > 0;
+        let more_data = report
+            .entries_available
+            .saturating_sub(report.entries_filled)
+            > 0;
         if !more_data {
             self.exhausted = true;
         } else if let Some(last) = self.chunk_entries.last() {

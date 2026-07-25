@@ -5,9 +5,7 @@
 //! ```
 use std::{env, fs::File, process};
 
-use freebsd_zonecmd::{
-    ZonedDevice, DiskParams, ReportOptions, ZoneCondition, ZoneEntry,
-};
+use freebsd_zonecmd::{DiskParams, ReportOptions, ZoneCondition, ZoneEntry, ZonedDevice};
 
 fn main() {
     let devpath = match env::args().nth(1) {

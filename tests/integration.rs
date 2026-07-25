@@ -6,7 +6,7 @@ use std::{
 use freebsd_zonecmd::*;
 use rstest::{fixture, rstest};
 
-const DEFAULT_ZONESIZE: u32 = 65536;    // Default zone size in sectors
+const DEFAULT_ZONESIZE: u32 = 65536; // Default zone size in sectors
 const SECTORSIZE: u32 = 4096;
 
 mod gzoned {
@@ -28,43 +28,52 @@ mod gzoned {
         conventional_zones: Vec<RangeInclusive<u64>>,
         sectors: u64,
         /// Size of a zone, in bytes
-        zonesize: u32
+        zonesize: u32,
     }
 
     impl Builder {
         pub fn build(self) -> io::Result<Gzoned> {
             let mut tf = NamedTempFile::new()?;
-            tf.as_file_mut().set_len(u64::from(SECTORSIZE) * self.sectors)?;
+            tf.as_file_mut()
+                .set_len(u64::from(SECTORSIZE) * self.sectors)?;
             let md = mdconfig::Builder::vnode(tf.path())
                 .sectorsize(SECTORSIZE)
                 .create()?;
 
             let mut builder = Command::new("gzoned");
-            builder.args(["create", "-s"])
+            builder
+                .args(["create", "-s"])
                 .arg(format!("{}", self.zonesize));
             if !self.conventional_zones.is_empty() {
-                let conventional_zones = self.conventional_zones.into_iter()
+                let conventional_zones = self
+                    .conventional_zones
+                    .into_iter()
                     .map(|r| {
-                         if 1 + r.end() - r.start() == 1 {
-                             format!("{}", r.start())
-                         } else {
-                             format!("{}-{}", r.start(), r.end())
-                         }
-                    }).collect::<Vec<_>>()
+                        if 1 + r.end() - r.start() == 1 {
+                            format!("{}", r.start())
+                        } else {
+                            format!("{}-{}", r.start(), r.end())
+                        }
+                    })
+                    .collect::<Vec<_>>()
                     .join(",");
-                builder.arg("-r")
-                .arg(conventional_zones);
+                builder.arg("-r").arg(conventional_zones);
             };
-            builder.arg(md.path())
-                .output()?;
+            builder.arg(md.path()).output()?;
             let pb = Path::new("/dev").join(format!("{}.zoned", md.path().display()));
-            Ok(Gzoned{pb, _md: md, _tf: tf})
+            Ok(Gzoned {
+                pb,
+                _md: md,
+                _tf: tf,
+            })
         }
 
         /// Add an inclusive range of zones that should be treated as conventional, not sequential
         pub fn conventional_zones(mut self, zones: RangeInclusive<u64>) -> Self {
-            assert!(self.conventional_zones.len() < 16,
-                "gzoned has a maximum of 16 conventional zone ranges");
+            assert!(
+                self.conventional_zones.len() < 16,
+                "gzoned has a maximum of 16 conventional zone ranges"
+            );
             self.conventional_zones.push(zones);
             self
         }
@@ -85,7 +94,11 @@ mod gzoned {
     impl Default for Builder {
         fn default() -> Self {
             let zonesize = DEFAULT_ZONESIZE * SECTORSIZE;
-            Builder { zonesize , sectors: 524288, conventional_zones: Default::default() }
+            Builder {
+                zonesize,
+                sectors: 524288,
+                conventional_zones: Default::default(),
+            }
         }
     }
 
@@ -94,7 +107,7 @@ mod gzoned {
     pub struct Gzoned {
         pb: PathBuf,
         _md: Md,
-        _tf: NamedTempFile
+        _tf: NamedTempFile,
     }
 
     impl Gzoned {
@@ -132,17 +145,26 @@ fn harness() -> Harness {
         .conventional_zones(0u64..=1)
         .build()
         .expect("gzoned create failed");
-    let f = OpenOptions::new().read(true).write(true).open(dev.path()).unwrap();
-    Harness{_dev: dev, f}
+    let f = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(dev.path())
+        .unwrap();
+    Harness { _dev: dev, f }
 }
 
 #[rstest]
 fn close_zone(harness: Harness) {
     let start_lba = 2 * u64::from(DEFAULT_ZONESIZE);
     let data = vec![42u8; SECTORSIZE as usize];
-    harness.f.write_all_at(&data, start_lba * u64::from(SECTORSIZE)).unwrap();
+    harness
+        .f
+        .write_all_at(&data, start_lba * u64::from(SECTORSIZE))
+        .unwrap();
     harness.zoned_device().close_zone(start_lba, false).unwrap();
-    let zones = harness.zoned_device().report_zones(ReportOptions::All, 0)
+    let zones = harness
+        .zoned_device()
+        .report_zones(ReportOptions::All, 0)
         .unwrap()
         .map(Result::unwrap)
         .collect::<Vec<_>>();
@@ -153,9 +175,17 @@ fn close_zone(harness: Harness) {
 fn finish_zone(harness: Harness) {
     let start_lba = 2 * u64::from(DEFAULT_ZONESIZE);
     let data = vec![42u8; SECTORSIZE as usize];
-    harness.f.write_all_at(&data, start_lba * u64::from(SECTORSIZE)).unwrap();
-    harness.zoned_device().finish_zone(start_lba, false).unwrap();
-    let zones = harness.zoned_device().report_zones(ReportOptions::All, 0)
+    harness
+        .f
+        .write_all_at(&data, start_lba * u64::from(SECTORSIZE))
+        .unwrap();
+    harness
+        .zoned_device()
+        .finish_zone(start_lba, false)
+        .unwrap();
+    let zones = harness
+        .zoned_device()
+        .report_zones(ReportOptions::All, 0)
         .unwrap()
         .map(Result::unwrap)
         .collect::<Vec<_>>();
@@ -178,7 +208,8 @@ fn open_zone(harness: Harness) {
     let zdev = harness.zoned_device();
     let start_lba = 2 * u64::from(DEFAULT_ZONESIZE);
     zdev.open_zone(start_lba, false).unwrap();
-    let zones = zdev.report_zones(ReportOptions::All, 0)
+    let zones = zdev
+        .report_zones(ReportOptions::All, 0)
         .unwrap()
         .map(Result::unwrap)
         .collect::<Vec<_>>();
@@ -187,7 +218,8 @@ fn open_zone(harness: Harness) {
 
 #[rstest]
 fn report_zones(harness: Harness) {
-    let zones = harness.zoned_device()
+    let zones = harness
+        .zoned_device()
         .report_zones(ReportOptions::All, 0)
         .unwrap()
         .map(Result::unwrap)
@@ -197,7 +229,10 @@ fn report_zones(harness: Harness) {
         assert_eq!(zones[i].zone_condition, ZoneCondition::NotWritePointer);
         assert!(!zones[i].needs_reset());
         assert!(!zones[i].non_sequential());
-        assert_eq!(zones[i].zone_start_lba, i as u64 * u64::from(DEFAULT_ZONESIZE));
+        assert_eq!(
+            zones[i].zone_start_lba,
+            i as u64 * u64::from(DEFAULT_ZONESIZE)
+        );
         assert_eq!(zones[i].zone_length, u64::from(DEFAULT_ZONESIZE));
         //assert!(zones[i].write_pointer_lba.is_none() );
     }
@@ -209,7 +244,7 @@ fn report_zones(harness: Harness) {
         let start_lba = i as u64 * u64::from(DEFAULT_ZONESIZE);
         assert_eq!(zones[i].zone_start_lba, start_lba);
         assert_eq!(zones[i].zone_length, u64::from(DEFAULT_ZONESIZE));
-        assert_eq!(zones[i].write_pointer_lba, Some(start_lba) );
+        assert_eq!(zones[i].write_pointer_lba, Some(start_lba));
     }
 }
 
@@ -217,14 +252,20 @@ fn report_zones(harness: Harness) {
 fn reset_write_pointer(harness: Harness) {
     let start_lba = 2 * u64::from(DEFAULT_ZONESIZE);
     let data = vec![42u8; SECTORSIZE as usize];
-    harness.f.write_all_at(&data, start_lba * u64::from(SECTORSIZE)).unwrap();
-    harness.zoned_device().reset_write_pointer(start_lba, false).unwrap();
-    let zones = harness.zoned_device().report_zones(ReportOptions::All, 0)
+    harness
+        .f
+        .write_all_at(&data, start_lba * u64::from(SECTORSIZE))
+        .unwrap();
+    harness
+        .zoned_device()
+        .reset_write_pointer(start_lba, false)
+        .unwrap();
+    let zones = harness
+        .zoned_device()
+        .report_zones(ReportOptions::All, 0)
         .unwrap()
         .map(Result::unwrap)
         .collect::<Vec<_>>();
     assert_eq!(zones[2].zone_condition, ZoneCondition::Empty);
-    assert_eq!(zones[2].write_pointer_lba, Some(start_lba) );
+    assert_eq!(zones[2].write_pointer_lba, Some(start_lba));
 }
-
-
