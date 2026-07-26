@@ -14,7 +14,7 @@ equivalent to what the [zonectl(8)] utility provides, but in idiomatic Rust.
 # Usage
 
 Open a block device and call [`ZonedDevice`] methods on it. The trait is implemented
-for any type that implements [`AsFd`], such as [`File`]. The device file must remain
+for any type that implements [`AsRawFd`], such as [`File`]. The device file must remain
 open for as long as zone operations are in progress.
 
 ```rust
