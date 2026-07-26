@@ -27,10 +27,12 @@ fn main() {
     });
     print_params(&params);
 
-    let zones = file.report_zones(ReportOptions::All, 0).unwrap_or_else(|e| {
-        eprintln!("report_zones: {e}");
-        process::exit(1);
-    });
+    let zones = file
+        .report_zones(ReportOptions::All, 0)
+        .unwrap_or_else(|e| {
+            eprintln!("report_zones: {e}");
+            process::exit(1);
+        });
 
     let header = zones.header();
     println!(

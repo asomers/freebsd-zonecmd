@@ -49,7 +49,7 @@ fn zonecmd_ioctl<F: AsFd>(fd: &F, args: &mut ffi::disk_zone_args) -> io::Result<
 
 fn rwp_cmd<F: AsFd>(fd: &F, cmd: u8, id: u64, all: bool) -> io::Result<()> {
     let mut args = ffi::disk_zone_args {
-        zone_cmd: cmd,
+        zone_cmd:    cmd,
         zone_params: ffi::disk_zone_params {
             rwp: ffi::disk_zone_rwp {
                 id,
@@ -138,15 +138,15 @@ impl<T: AsFd> ZonedDevice for T {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiskParams {
     /// How the drive manages zones.
-    pub zone_mode: ZoneMode,
+    pub zone_mode:            ZoneMode,
     /// Raw capability flags from the device.
-    pub flags: u64,
+    pub flags:                u64,
     /// Optimal number of open sequential-write-preferred zones, if reported.
-    pub optimal_seq_zones: Option<u64>,
+    pub optimal_seq_zones:    Option<u64>,
     /// Optimal number of non-sequentially written sequential-write-preferred zones.
     pub optimal_nonseq_zones: Option<u64>,
     /// Maximum number of open sequential-write-required zones.
-    pub max_seq_zones: Option<u64>,
+    pub max_seq_zones:        Option<u64>,
 }
 
 impl DiskParams {
@@ -268,7 +268,7 @@ pub enum ReportOptions {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ReportHeader {
     /// How zone lengths and types relate across the device.
-    pub same: ZoneSame,
+    pub same:        ZoneSame,
     /// Maximum LBA on the device.
     pub maximum_lba: u64,
 }
@@ -276,7 +276,7 @@ pub struct ReportHeader {
 impl From<ffi::disk_zone_rep_header> for ReportHeader {
     fn from(header: ffi::disk_zone_rep_header) -> Self {
         Self {
-            same: ZoneSame::from(header.same),
+            same:        ZoneSame::from(header.same),
             maximum_lba: header.maximum_lba,
         }
     }
@@ -313,16 +313,16 @@ impl From<u8> for ZoneSame {
 /// Iterator over zone entries returned by [`ZonedDevice::report_zones`].
 #[derive(Debug)]
 pub struct ReportZones<'a, F: AsFd> {
-    device: &'a F,
-    options: ReportOptions,
-    starting_id: u64,
-    chunksize: u32,
-    chunk_entries: Vec<ZoneEntry>,
-    chunk_index: usize,
-    header: ReportHeader,
+    device:            &'a F,
+    options:           ReportOptions,
+    starting_id:       u64,
+    chunksize:         u32,
+    chunk_entries:     Vec<ZoneEntry>,
+    chunk_index:       usize,
+    header:            ReportHeader,
     entries_available: u32,
-    header_set: bool,
-    exhausted: bool,
+    header_set:        bool,
+    exhausted:         bool,
 }
 
 impl<'a, F: AsFd> ReportZones<'a, F> {
@@ -340,7 +340,7 @@ impl<'a, F: AsFd> ReportZones<'a, F> {
         let mut raw_entries = vec![ffi::disk_zone_rep_entry::default(); self.chunksize as usize];
 
         let mut args = ffi::disk_zone_args {
-            zone_cmd: ffi::DISK_ZONE_REPORT_ZONES as u8,
+            zone_cmd:    ffi::DISK_ZONE_REPORT_ZONES as u8,
             zone_params: ffi::disk_zone_params {
                 report: ffi::disk_zone_report {
                     starting_id: self.starting_id,
@@ -413,14 +413,14 @@ impl<'a, F: AsFd> Iterator for ReportZones<'a, F> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ZoneEntry {
     /// Zone type.
-    pub zone_type: ZoneType,
+    pub zone_type:         ZoneType,
     /// Zone condition.
-    pub zone_condition: ZoneCondition,
-    zone_flags: u8,
+    pub zone_condition:    ZoneCondition,
+    zone_flags:            u8,
     /// Zone length in LBAs.
-    pub zone_length: u64,
+    pub zone_length:       u64,
     /// Starting LBA of the zone.
-    pub zone_start_lba: u64,
+    pub zone_start_lba:    u64,
     /// Write pointer LBA, if applicable.
     pub write_pointer_lba: Option<u64>,
 }
@@ -535,11 +535,11 @@ mod tests {
     #[test]
     fn disk_params_support_flags() {
         let params = DiskParams {
-            zone_mode: ZoneMode::HostManaged,
-            flags: ffi::DISK_ZONE_RZ_SUP as u64 | ffi::DISK_ZONE_OPEN_SUP as u64,
-            optimal_seq_zones: None,
+            zone_mode:            ZoneMode::HostManaged,
+            flags:                ffi::DISK_ZONE_RZ_SUP as u64 | ffi::DISK_ZONE_OPEN_SUP as u64,
+            optimal_seq_zones:    None,
             optimal_nonseq_zones: None,
-            max_seq_zones: None,
+            max_seq_zones:        None,
         };
         assert!(params.supports_report_zones());
         assert!(params.supports_open());

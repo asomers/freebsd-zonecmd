@@ -10,7 +10,7 @@ use rstest::{fixture, rstest};
 #[derive(Debug)]
 struct Harness {
     _dev: gzoned::Gzoned,
-    f: File,
+    f:    File,
 }
 
 #[fixture]
@@ -53,10 +53,7 @@ fn finish_zone(harness: Harness) {
         .f
         .write_all_at(&data, start_lba * u64::from(SECTORSIZE))
         .unwrap();
-    harness
-        .f
-        .finish_zone(start_lba, false)
-        .unwrap();
+    harness.f.finish_zone(start_lba, false).unwrap();
     let zones = harness
         .f
         .report_zones(ReportOptions::All, 0)
@@ -90,7 +87,7 @@ fn open_zone(harness: Harness) {
     assert_eq!(zones[2].zone_condition, ZoneCondition::ExplicitOpen);
 }
 
-#[allow(clippy::needless_range_loop)]   // In this case, I don't like Clippy's suggestion
+#[allow(clippy::needless_range_loop)] // In this case, I don't like Clippy's suggestion
 #[rstest]
 fn report_zones(harness: Harness) {
     let zones = harness
@@ -110,7 +107,7 @@ fn report_zones(harness: Harness) {
         );
         assert_eq!(zones[i].zone_length, u64::from(DEFAULT_ZONESIZE));
         // Disable this assertion.  It fails due to a bug in gzoned.
-        //assert!(zones[i].write_pointer_lba.is_none() );
+        // assert!(zones[i].write_pointer_lba.is_none() );
     }
     for i in 2..zones.len() {
         assert_eq!(zones[i].zone_type, ZoneType::SeqRequired);
@@ -132,10 +129,7 @@ fn reset_write_pointer(harness: Harness) {
         .f
         .write_all_at(&data, start_lba * u64::from(SECTORSIZE))
         .unwrap();
-    harness
-        .f
-        .reset_write_pointer(start_lba, false)
-        .unwrap();
+    harness.f.reset_write_pointer(start_lba, false).unwrap();
     let zones = harness
         .f
         .report_zones(ReportOptions::All, 0)

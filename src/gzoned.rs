@@ -20,9 +20,9 @@ pub const SECTORSIZE: u32 = 4096;
 #[derive(Debug)]
 pub struct Builder {
     conventional_zones: Vec<RangeInclusive<u64>>,
-    sectors: u64,
+    sectors:            u64,
     /// Size of a zone, in bytes.
-    zonesize: u32,
+    zonesize:           u32,
 }
 
 impl Builder {
@@ -100,7 +100,7 @@ impl Default for Builder {
 /// A temporary gzoned(8) device that will clean up after itself on drop.
 #[derive(Debug)]
 pub struct Gzoned {
-    pb: PathBuf,
+    pb:  PathBuf,
     _md: Md,
     _tf: NamedTempFile,
 }
