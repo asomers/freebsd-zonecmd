@@ -524,6 +524,10 @@ pub mod raw {
     pub use super::ffi::*;
 }
 
+/// Helpers for creating temporary gzoned(8) devices.
+#[cfg(feature = "gzoned")]
+pub mod gzoned;
+
 #[cfg(test)]
 mod tests {
     use super::*;

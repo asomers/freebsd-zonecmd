@@ -40,9 +40,39 @@ See also the [zoneinfo](examples/zoneinfo.rs) example:
 cargo run --example zoneinfo -- /dev/da0
 ```
 
+# Features
+
+## `gzoned`
+
+The optional `gzoned` feature exposes the `gzoned` module, which provides helpers
+for creating temporary [gzoned(8)] devices. This is useful for testing and
+development when you do not have access to physical zoned storage. The feature is
+disabled by default.
+
+Enable it in `Cargo.toml`:
+
+```toml
+[dependencies]
+freebsd-zonecmd = { version = "0.1", features = ["gzoned"] }
+```
+
+Example:
+
+```rust
+use freebsd_zonecmd::gzoned::Builder;
+
+let dev = Builder::default()
+    .conventional_zones(0..=1)
+    .build()?;
+println!("{}", dev.path().display());
+```
+
+[gzoned(8)]: https://man.freebsd.org/cgi/man.cgi?query=gzoned
+
 # Platforms
 
-This crate only works on FreeBSD 11.0 or later.
+This crate only works on FreeBSD 11.0 or later.  The `gzoned` feature only
+works on FreeBSD 16.0 or later.
 
 # Minimum Supported Rust Version (MSRV)
 
