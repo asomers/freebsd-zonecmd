@@ -9,6 +9,9 @@
 //! The main entry point is the [`ZonedDevice`] extension trait, implemented for any type that
 //! implements [`AsFd`], which exposes methods for querying zone parameters, reporting zones,
 //! and managing zone state.
+
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 use std::{
     io,
     os::fd::{AsFd, AsRawFd},

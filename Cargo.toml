@@ -13,7 +13,8 @@ include = ["src/**/*", "bindgen/**/*", "examples/**/*", "LICENSE-*", "README.md"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-freebsd"]
-features = ["gzoned"]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
