@@ -133,12 +133,6 @@ struct Harness {
     f: File,
 }
 
-impl Harness {
-    pub fn zoned_device(&self) -> ZonedDevice<'_> {
-        ZonedDevice::new(&self.f)
-    }
-}
-
 #[fixture]
 fn harness() -> Harness {
     let dev = gzoned::Builder::default()
@@ -161,9 +155,9 @@ fn close_zone(harness: Harness) {
         .f
         .write_all_at(&data, start_lba * u64::from(SECTORSIZE))
         .unwrap();
-    harness.zoned_device().close_zone(start_lba, false).unwrap();
+    harness.f.close_zone(start_lba, false).unwrap();
     let zones = harness
-        .zoned_device()
+        .f
         .report_zones(ReportOptions::All, 0)
         .unwrap()
         .map(Result::unwrap)
@@ -180,11 +174,11 @@ fn finish_zone(harness: Harness) {
         .write_all_at(&data, start_lba * u64::from(SECTORSIZE))
         .unwrap();
     harness
-        .zoned_device()
+        .f
         .finish_zone(start_lba, false)
         .unwrap();
     let zones = harness
-        .zoned_device()
+        .f
         .report_zones(ReportOptions::All, 0)
         .unwrap()
         .map(Result::unwrap)
@@ -194,7 +188,7 @@ fn finish_zone(harness: Harness) {
 
 #[rstest]
 fn get_params(harness: Harness) {
-    let params = harness.zoned_device().get_params().unwrap();
+    let params = harness.f.get_params().unwrap();
     assert_eq!(params.zone_mode, ZoneMode::HostManaged);
     assert!(params.supports_open());
     assert!(params.supports_close());
@@ -205,7 +199,7 @@ fn get_params(harness: Harness) {
 
 #[rstest]
 fn open_zone(harness: Harness) {
-    let zdev = harness.zoned_device();
+    let zdev = &harness.f;
     let start_lba = 2 * u64::from(DEFAULT_ZONESIZE);
     zdev.open_zone(start_lba, false).unwrap();
     let zones = zdev
@@ -219,7 +213,7 @@ fn open_zone(harness: Harness) {
 #[rstest]
 fn report_zones(harness: Harness) {
     let zones = harness
-        .zoned_device()
+        .f
         .report_zones(ReportOptions::All, 0)
         .unwrap()
         .map(Result::unwrap)
@@ -257,11 +251,11 @@ fn reset_write_pointer(harness: Harness) {
         .write_all_at(&data, start_lba * u64::from(SECTORSIZE))
         .unwrap();
     harness
-        .zoned_device()
+        .f
         .reset_write_pointer(start_lba, false)
         .unwrap();
     let zones = harness
-        .zoned_device()
+        .f
         .report_zones(ReportOptions::All, 0)
         .unwrap()
         .map(Result::unwrap)

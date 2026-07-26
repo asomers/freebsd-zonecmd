@@ -6,11 +6,12 @@
 //! what the [zonectl(8)](https://man.freebsd.org/cgi/man.cgi?query=zonectl) utility
 //! provides, but in idiomatic Rust.
 //!
-//! The main entry point is [`ZonedDevice`], which borrows an open file descriptor and exposes
-//! methods for querying zone parameters, reporting zones, and managing zone state.
+//! The main entry point is the [`ZonedDevice`] extension trait, implemented for any type that
+//! implements [`AsFd`], which exposes methods for querying zone parameters, reporting zones,
+//! and managing zone state.
 use std::{
     io,
-    os::fd::{AsFd, AsRawFd, BorrowedFd},
+    os::fd::{AsFd, AsRawFd},
 };
 
 use nix::ioctl_readwrite;
@@ -41,51 +42,80 @@ pub const WRITE_POINTER_NA: u64 = u64::MAX;
 /// The kernel may return fewer entries than requested, based on `maxphys`.
 pub const DEFAULT_CHUNKSIZE: u32 = 16384;
 
-/// A zoned block device borrowed for `DIOCZONECMD` operations.
-#[derive(Debug)]
-pub struct ZonedDevice<'fd> {
-    fd: BorrowedFd<'fd>,
+fn zonecmd_ioctl<F: AsFd>(fd: &F, args: &mut ffi::disk_zone_args) -> io::Result<()> {
+    unsafe { ioctl::dioczonecmd(fd.as_fd().as_raw_fd(), args) }?;
+    Ok(())
 }
 
-impl<'fd> ZonedDevice<'fd> {
-    /// Borrow a device file descriptor from any [`AsFd`] type.
-    pub fn new<F: AsFd>(fd: &'fd F) -> Self {
-        Self { fd: fd.as_fd() }
-    }
+fn rwp_cmd<F: AsFd>(fd: &F, cmd: u8, id: u64, all: bool) -> io::Result<()> {
+    let mut args = ffi::disk_zone_args {
+        zone_cmd: cmd,
+        zone_params: ffi::disk_zone_params {
+            rwp: ffi::disk_zone_rwp {
+                id,
+                flags: if all {
+                    ffi::DISK_ZONE_RWP_FLAG_ALL as u8
+                } else {
+                    0
+                },
+            },
+        },
+    };
+    zonecmd_ioctl(fd, &mut args)
+}
 
-    /// Return the borrowed file descriptor.
-    pub fn as_fd(&self) -> BorrowedFd<'fd> {
-        self.fd
-    }
+fn report_zones_with_chunk<F: AsFd>(
+    fd: &F,
+    options: ReportOptions,
+    starting_id: u64,
+    chunksize: u32,
+) -> io::Result<ReportZones<'_, F>> {
+    let mut zones = ReportZones {
+        device: fd,
+        options,
+        starting_id,
+        chunksize,
+        chunk_entries: Vec::new(),
+        chunk_index: 0,
+        header: ReportHeader::default(),
+        entries_available: 0,
+        header_set: false,
+        exhausted: false,
+    };
+    zones.fetch_chunk()?;
+    Ok(zones)
+}
 
+/// Extension trait for `DIOCZONECMD` operations on zoned block devices.
+pub trait ZonedDevice: AsFd + Sized {
     /// Return zone device parameters.
-    pub fn get_params(&self) -> io::Result<DiskParams> {
+    fn get_params(&self) -> io::Result<DiskParams> {
         let mut args = ffi::disk_zone_args {
             zone_cmd: ffi::DISK_ZONE_GET_PARAMS as u8,
             ..Default::default()
         };
-        self.zonecmd(&mut args)?;
+        zonecmd_ioctl(self, &mut args)?;
         Ok(DiskParams::from(unsafe { args.zone_params.disk_params }))
     }
 
     /// Open the zone at `id`, or all zones if `all` is true.
-    pub fn open_zone(&self, id: u64, all: bool) -> io::Result<()> {
-        self.rwp_cmd(ffi::DISK_ZONE_OPEN as u8, id, all)
+    fn open_zone(&self, id: u64, all: bool) -> io::Result<()> {
+        rwp_cmd(self, ffi::DISK_ZONE_OPEN as u8, id, all)
     }
 
     /// Close the zone at `id`, or all zones if `all` is true.
-    pub fn close_zone(&self, id: u64, all: bool) -> io::Result<()> {
-        self.rwp_cmd(ffi::DISK_ZONE_CLOSE as u8, id, all)
+    fn close_zone(&self, id: u64, all: bool) -> io::Result<()> {
+        rwp_cmd(self, ffi::DISK_ZONE_CLOSE as u8, id, all)
     }
 
     /// Finish the zone at `id`, or all zones if `all` is true.
-    pub fn finish_zone(&self, id: u64, all: bool) -> io::Result<()> {
-        self.rwp_cmd(ffi::DISK_ZONE_FINISH as u8, id, all)
+    fn finish_zone(&self, id: u64, all: bool) -> io::Result<()> {
+        rwp_cmd(self, ffi::DISK_ZONE_FINISH as u8, id, all)
     }
 
     /// Reset the write pointer for the zone at `id`, or all zones if `all` is true.
-    pub fn reset_write_pointer(&self, id: u64, all: bool) -> io::Result<()> {
-        self.rwp_cmd(ffi::DISK_ZONE_RWP as u8, id, all)
+    fn reset_write_pointer(&self, id: u64, all: bool) -> io::Result<()> {
+        rwp_cmd(self, ffi::DISK_ZONE_RWP as u8, id, all)
     }
 
     /// Report zones matching `options`, starting at `starting_id`.
@@ -93,58 +123,16 @@ impl<'fd> ZonedDevice<'fd> {
     /// Yields one [`ZoneEntry`] at a time. Header metadata is available from the
     /// iterator's [`ReportZones::header`] and [`ReportZones::entries_available`] methods
     /// immediately after this function returns successfully.
-    pub fn report_zones(
+    fn report_zones(
         &self,
         options: ReportOptions,
         starting_id: u64,
-    ) -> io::Result<ReportZones<'_, 'fd>> {
-        self.report_zones_with_chunk(options, starting_id, DEFAULT_CHUNKSIZE)
-    }
-
-    fn report_zones_with_chunk(
-        &self,
-        options: ReportOptions,
-        starting_id: u64,
-        chunksize: u32,
-    ) -> io::Result<ReportZones<'_, 'fd>> {
-        let mut zones = ReportZones {
-            device: self,
-            options,
-            starting_id,
-            chunksize,
-            chunk_entries: Vec::new(),
-            chunk_index: 0,
-            header: ReportHeader::default(),
-            entries_available: 0,
-            header_set: false,
-            exhausted: false,
-        };
-        zones.fetch_chunk()?;
-        Ok(zones)
-    }
-
-    fn rwp_cmd(&self, cmd: u8, id: u64, all: bool) -> io::Result<()> {
-        let mut args = ffi::disk_zone_args {
-            zone_cmd: cmd,
-            zone_params: ffi::disk_zone_params {
-                rwp: ffi::disk_zone_rwp {
-                    id,
-                    flags: if all {
-                        ffi::DISK_ZONE_RWP_FLAG_ALL as u8
-                    } else {
-                        0
-                    },
-                },
-            },
-        };
-        self.zonecmd(&mut args)
-    }
-
-    fn zonecmd(&self, args: &mut ffi::disk_zone_args) -> io::Result<()> {
-        unsafe { ioctl::dioczonecmd(self.fd.as_raw_fd(), args) }?;
-        Ok(())
+    ) -> io::Result<ReportZones<'_, Self>> {
+        report_zones_with_chunk(self, options, starting_id, DEFAULT_CHUNKSIZE)
     }
 }
+
+impl<T: AsFd> ZonedDevice for T {}
 
 /// Zone device parameters returned by [`ZonedDevice::get_params`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -324,8 +312,8 @@ impl From<u8> for ZoneSame {
 
 /// Iterator over zone entries returned by [`ZonedDevice::report_zones`].
 #[derive(Debug)]
-pub struct ReportZones<'a, 'fd> {
-    device: &'a ZonedDevice<'fd>,
+pub struct ReportZones<'a, F: AsFd> {
+    device: &'a F,
     options: ReportOptions,
     starting_id: u64,
     chunksize: u32,
@@ -337,7 +325,7 @@ pub struct ReportZones<'a, 'fd> {
     exhausted: bool,
 }
 
-impl<'a, 'fd> ReportZones<'a, 'fd> {
+impl<'a, F: AsFd> ReportZones<'a, F> {
     /// Report header metadata from the first ioctl.
     pub fn header(&self) -> &ReportHeader {
         &self.header
@@ -364,7 +352,7 @@ impl<'a, 'fd> ReportZones<'a, 'fd> {
             },
         };
 
-        self.device.zonecmd(&mut args)?;
+        zonecmd_ioctl(self.device, &mut args)?;
         let report = unsafe { &args.zone_params.report };
 
         if !self.header_set {
@@ -396,7 +384,7 @@ impl<'a, 'fd> ReportZones<'a, 'fd> {
     }
 }
 
-impl<'a, 'fd> Iterator for ReportZones<'a, 'fd> {
+impl<'a, F: AsFd> Iterator for ReportZones<'a, F> {
     type Item = io::Result<ZoneEntry>;
 
     fn next(&mut self) -> Option<Self::Item> {

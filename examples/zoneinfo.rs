@@ -21,15 +21,13 @@ fn main() {
         process::exit(1);
     });
 
-    let dev = ZonedDevice::new(&file);
-
-    let params = dev.get_params().unwrap_or_else(|e| {
+    let params = file.get_params().unwrap_or_else(|e| {
         eprintln!("get_params: {e}");
         process::exit(1);
     });
     print_params(&params);
 
-    let zones = dev.report_zones(ReportOptions::All, 0).unwrap_or_else(|e| {
+    let zones = file.report_zones(ReportOptions::All, 0).unwrap_or_else(|e| {
         eprintln!("report_zones: {e}");
         process::exit(1);
     });

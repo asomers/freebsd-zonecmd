@@ -13,8 +13,9 @@ equivalent to what the [zonectl(8)] utility provides, but in idiomatic Rust.
 
 # Usage
 
-Open a block device, wrap it in a [`ZonedDevice`], and call its methods. The device
-file must remain open for as long as the `ZonedDevice` is used.
+Open a block device and call [`ZonedDevice`] methods on it. The trait is implemented
+for any type that implements [`AsFd`], such as [`File`]. The device file must remain
+open for as long as zone operations are in progress.
 
 ```rust
 use std::fs::File;
@@ -22,12 +23,11 @@ use std::fs::File;
 use freebsd_zonecmd::{ZonedDevice, ReportOptions};
 
 let file = File::open("/dev/da0")?;
-let dev = ZonedDevice::new(&file);
 
-let params = dev.get_params()?;
+let params = file.get_params()?;
 println!("{:?}", params.zone_mode);
 
-let zones = dev.report_zones(ReportOptions::All, 0)?;
+let zones = file.report_zones(ReportOptions::All, 0)?;
 println!("{} zones", zones.entries_available());
 for entry in zones {
     println!("{:?}", entry?);
