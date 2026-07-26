@@ -210,6 +210,7 @@ fn open_zone(harness: Harness) {
     assert_eq!(zones[2].zone_condition, ZoneCondition::ExplicitOpen);
 }
 
+#[allow(clippy::needless_range_loop)]   // In this case, I don't like Clippy's suggestion
 #[rstest]
 fn report_zones(harness: Harness) {
     let zones = harness
@@ -228,6 +229,7 @@ fn report_zones(harness: Harness) {
             i as u64 * u64::from(DEFAULT_ZONESIZE)
         );
         assert_eq!(zones[i].zone_length, u64::from(DEFAULT_ZONESIZE));
+        // Disable this assertion.  It fails due to a bug in gzoned.
         //assert!(zones[i].write_pointer_lba.is_none() );
     }
     for i in 2..zones.len() {
