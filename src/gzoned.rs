@@ -53,7 +53,7 @@ impl Builder {
                 })
                 .collect::<Vec<_>>()
                 .join(",");
-            builder.arg("-r").arg(conventional_zones);
+            builder.arg("-c").arg(conventional_zones);
         };
         let t = builder.arg(md.path()).output()?;
         if !t.status.success() {
