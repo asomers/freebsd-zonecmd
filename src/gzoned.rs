@@ -4,7 +4,7 @@ use std::{
     io,
     ops::RangeInclusive,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use mdconfig::Md;
@@ -37,6 +37,7 @@ impl Builder {
 
         let mut builder = Command::new("gzoned");
         builder
+            .stderr(Stdio::inherit())
             .args(["create", "-s"])
             .arg(format!("{}", self.zonesize));
         if !self.conventional_zones.is_empty() {
@@ -54,7 +55,11 @@ impl Builder {
                 .join(",");
             builder.arg("-r").arg(conventional_zones);
         };
-        builder.arg(md.path()).output()?;
+        let t = builder.arg(md.path()).output()?;
+        if !t.status.success() {
+            // TODO: use anyerror instead of io::Error
+            return Err(io::Error::new(io::ErrorKind::Other, "todo"));
+        }
         let pb = Path::new("/dev").join(format!("{}.zoned", md.path().display()));
         Ok(Gzoned {
             pb,

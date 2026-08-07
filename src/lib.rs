@@ -12,10 +12,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::{
-    io,
-    os::fd::AsRawFd,
-};
+use std::{io, os::fd::AsRawFd};
 
 use nix::ioctl_readwrite;
 
@@ -55,7 +52,7 @@ fn rwp_cmd<F: AsRawFd>(fd: &F, cmd: u8, start_lba: u64, all: bool) -> io::Result
         zone_cmd:    cmd,
         zone_params: ffi::disk_zone_params {
             rwp: ffi::disk_zone_rwp {
-                id: start_lba,
+                id:    start_lba,
                 flags: if all {
                     ffi::DISK_ZONE_RWP_FLAG_ALL as u8
                 } else {
