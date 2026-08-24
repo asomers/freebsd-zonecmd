@@ -27,7 +27,7 @@ pub struct Builder {
 
 impl Builder {
     /// Create a temporary gzoned device from this builder's settings.
-    pub fn build(self) -> io::Result<Gzoned> {
+    pub fn build(&mut self) -> io::Result<Gzoned> {
         let mut tf = NamedTempFile::new()?;
         tf.as_file_mut()
             .set_len(u64::from(SECTORSIZE) * self.sectors)?;
@@ -43,7 +43,7 @@ impl Builder {
         if !self.conventional_zones.is_empty() {
             let conventional_zones = self
                 .conventional_zones
-                .into_iter()
+                .iter()
                 .map(|r| {
                     if 1 + r.end() - r.start() == 1 {
                         format!("{}", r.start())
@@ -69,7 +69,7 @@ impl Builder {
     }
 
     /// Add an inclusive range of zones that should be treated as conventional, not sequential.
-    pub fn conventional_zones(mut self, zones: RangeInclusive<u64>) -> Self {
+    pub fn conventional_zones(&mut self, zones: RangeInclusive<u64>) -> &mut Self {
         assert!(
             self.conventional_zones.len() < 16,
             "gzoned has a maximum of 16 conventional zone ranges"
@@ -79,13 +79,13 @@ impl Builder {
     }
 
     /// Set the total size of the device, in 4k sectors.
-    pub fn sectors(mut self, sectors: u64) -> Self {
+    pub fn sectors(&mut self, sectors: u64) -> &mut Self {
         self.sectors = sectors;
         self
     }
 
     /// Set the simulated zone size, in sectors.
-    pub fn zonesize(mut self, size: u32) -> Self {
+    pub fn zonesize(&mut self, size: u32) -> &mut Self {
         self.zonesize = size * SECTORSIZE;
         self
     }
