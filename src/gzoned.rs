@@ -58,7 +58,7 @@ impl Builder {
         let t = builder.arg(md.path()).output()?;
         if !t.status.success() {
             // TODO: use anyerror instead of io::Error
-            return Err(io::Error::new(io::ErrorKind::Other, "todo"));
+            return Err(io::Error::other("todo"));
         }
         let pb = Path::new("/dev").join(format!("{}.zoned", md.path().display()));
         Ok(Gzoned {
