@@ -1,11 +1,46 @@
 use std::{
     fs::{File, OpenOptions},
     os::unix::fs::FileExt,
+    process::Command
 };
 
 use freebsd_zonecmd::{gzoned, *};
+use function_name::named;
 use gzoned::{DEFAULT_ZONESIZE, SECTORSIZE};
-use rstest::{fixture, rstest};
+use rstest::rstest;
+
+/// Skip the test if gzoned cannot be found.  It isn't present until FreeBSD 16.0
+#[macro_export]
+macro_rules! require_gzoned {
+    () => {
+        if !Command::new("which")
+            .arg("gzoned")
+                .output()
+                .expect("Failed to execute 'which'")
+                .status
+                .success()
+        {
+            use ::std::io::Write;
+
+            let stderr = ::std::io::stderr();
+            let mut handle = stderr.lock();
+            writeln!(handle, "{} requires gzoned be available. Skipping test.",
+                concat!(::std::module_path!(), "::", function_name!()))
+                .unwrap();
+            return;
+        }
+        if ! ::nix::unistd::Uid::current().is_root() {
+            use ::std::io::Write;
+
+            let stderr = ::std::io::stderr();
+            let mut handle = stderr.lock();
+            writeln!(handle, "{} requires root privileges.  Skipping test.",
+                concat!(::std::module_path!(), "::", function_name!()))
+                .unwrap();
+            return;
+        }
+    }
+}
 
 #[derive(Debug)]
 struct Harness {
@@ -13,22 +48,28 @@ struct Harness {
     f:    File,
 }
 
-#[fixture]
-fn harness() -> Harness {
-    let dev = gzoned::Builder::default()
-        .conventional_zones(0u64..=1)
-        .build()
-        .expect("gzoned create failed");
-    let f = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(dev.path())
-        .unwrap();
-    Harness { _dev: dev, f }
+impl Harness {
+    fn new() -> Self {
+        let dev = gzoned::Builder::default()
+            .conventional_zones(0u64..=1)
+            .build()
+            .expect("gzoned create failed");
+        let f = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(dev.path())
+            .unwrap();
+        Harness { _dev: dev, f }
+    }
 }
 
+
+#[named]
 #[rstest]
-fn close_zone(harness: Harness) {
+fn close_zone() {
+    require_gzoned!();
+    let harness = Harness::new();
+
     let start_lba = 2 * u64::from(DEFAULT_ZONESIZE);
     let data = vec![42u8; SECTORSIZE as usize];
     harness
@@ -45,8 +86,12 @@ fn close_zone(harness: Harness) {
     assert_eq!(zones[2].zone_condition, ZoneCondition::Closed);
 }
 
+#[named]
 #[rstest]
-fn finish_zone(harness: Harness) {
+fn finish_zone() {
+    require_gzoned!();
+    let harness = Harness::new();
+
     let start_lba = 2 * u64::from(DEFAULT_ZONESIZE);
     let data = vec![42u8; SECTORSIZE as usize];
     harness
@@ -63,8 +108,12 @@ fn finish_zone(harness: Harness) {
     assert_eq!(zones[2].zone_condition, ZoneCondition::Full);
 }
 
+#[named]
 #[rstest]
-fn get_params(harness: Harness) {
+fn get_params() {
+    require_gzoned!();
+    let harness = Harness::new();
+
     let params = harness.f.get_params().unwrap();
     assert_eq!(params.zone_mode, ZoneMode::HostManaged);
     assert!(params.supports_open());
@@ -74,8 +123,12 @@ fn get_params(harness: Harness) {
     assert!(params.unrestricted_read_in_seq_required());
 }
 
+#[named]
 #[rstest]
-fn open_zone(harness: Harness) {
+fn open_zone() {
+    require_gzoned!();
+    let harness = Harness::new();
+
     let zdev = &harness.f;
     let start_lba = 2 * u64::from(DEFAULT_ZONESIZE);
     zdev.open_zone(start_lba, false).unwrap();
@@ -88,8 +141,12 @@ fn open_zone(harness: Harness) {
 }
 
 #[allow(clippy::needless_range_loop)] // In this case, I don't like Clippy's suggestion
+#[named]
 #[rstest]
-fn report_zones(harness: Harness) {
+fn report_zones() {
+    require_gzoned!();
+    let harness = Harness::new();
+
     let zones = harness
         .f
         .report_zones(ReportOptions::All, 0)
@@ -121,8 +178,12 @@ fn report_zones(harness: Harness) {
     }
 }
 
+#[named]
 #[rstest]
-fn reset_write_pointer(harness: Harness) {
+fn reset_write_pointer() {
+    require_gzoned!();
+    let harness = Harness::new();
+
     let start_lba = 2 * u64::from(DEFAULT_ZONESIZE);
     let data = vec![42u8; SECTORSIZE as usize];
     harness
