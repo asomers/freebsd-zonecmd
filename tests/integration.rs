@@ -1,7 +1,7 @@
 use std::{
     fs::{File, OpenOptions},
     os::unix::fs::FileExt,
-    process::Command
+    process::Command,
 };
 
 use freebsd_zonecmd::{gzoned, *};
@@ -15,31 +15,37 @@ macro_rules! require_gzoned {
     () => {
         if !Command::new("which")
             .arg("gzoned")
-                .output()
-                .expect("Failed to execute 'which'")
-                .status
-                .success()
+            .output()
+            .expect("Failed to execute 'which'")
+            .status
+            .success()
         {
             use ::std::io::Write;
 
             let stderr = ::std::io::stderr();
             let mut handle = stderr.lock();
-            writeln!(handle, "{} requires gzoned be available. Skipping test.",
-                concat!(::std::module_path!(), "::", function_name!()))
-                .unwrap();
+            writeln!(
+                handle,
+                "{} requires gzoned be available. Skipping test.",
+                concat!(::std::module_path!(), "::", function_name!())
+            )
+            .unwrap();
             return;
         }
-        if ! ::nix::unistd::Uid::current().is_root() {
+        if !::nix::unistd::Uid::current().is_root() {
             use ::std::io::Write;
 
             let stderr = ::std::io::stderr();
             let mut handle = stderr.lock();
-            writeln!(handle, "{} requires root privileges.  Skipping test.",
-                concat!(::std::module_path!(), "::", function_name!()))
-                .unwrap();
+            writeln!(
+                handle,
+                "{} requires root privileges.  Skipping test.",
+                concat!(::std::module_path!(), "::", function_name!())
+            )
+            .unwrap();
             return;
         }
-    }
+    };
 }
 
 #[derive(Debug)]
@@ -62,7 +68,6 @@ impl Harness {
         Harness { _dev: dev, f }
     }
 }
-
 
 #[named]
 #[rstest]
