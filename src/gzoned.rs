@@ -57,7 +57,9 @@ impl Builder {
         };
         let t = builder.arg(md.path()).output()?;
         if !t.status.success() {
-            return Err(io::Error::other(String::from_utf8_lossy(&t.stderr).trim_end()));
+            return Err(io::Error::other(
+                String::from_utf8_lossy(&t.stderr).trim_end(),
+            ));
         }
         let pb = Path::new("/dev").join(format!("{}.zoned", md.path().display()));
         Ok(Gzoned {
