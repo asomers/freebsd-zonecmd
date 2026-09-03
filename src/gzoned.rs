@@ -22,7 +22,7 @@ pub struct Builder {
     conventional_zones: Vec<RangeInclusive<u64>>,
     sectors:            u64,
     /// Size of a zone, in bytes.
-    zonesize:           u32,
+    zonesize:           u64,
 }
 
 impl Builder {
@@ -37,7 +37,7 @@ impl Builder {
 
         let mut builder = Command::new("gzoned");
         builder
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())
             .args(["create", "-s"])
             .arg(format!("{}", self.zonesize));
         if !self.conventional_zones.is_empty() {
@@ -57,8 +57,7 @@ impl Builder {
         };
         let t = builder.arg(md.path()).output()?;
         if !t.status.success() {
-            // TODO: use anyerror instead of io::Error
-            return Err(io::Error::other("todo"));
+            return Err(io::Error::other(String::from_utf8_lossy(&t.stderr).trim_end()));
         }
         let pb = Path::new("/dev").join(format!("{}.zoned", md.path().display()));
         Ok(Gzoned {
@@ -86,14 +85,14 @@ impl Builder {
 
     /// Set the simulated zone size, in sectors.
     pub fn zonesize(&mut self, size: u32) -> &mut Self {
-        self.zonesize = size * SECTORSIZE;
+        self.zonesize = u64::from(size) * u64::from(SECTORSIZE);
         self
     }
 }
 
 impl Default for Builder {
     fn default() -> Self {
-        let zonesize = DEFAULT_ZONESIZE * SECTORSIZE;
+        let zonesize = u64::from(DEFAULT_ZONESIZE * SECTORSIZE);
         Builder {
             zonesize,
             sectors: 524288,
